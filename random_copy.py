@@ -35,7 +35,7 @@ def process_options():
             help=('Destination directory'))
     parser.add_option('-s', '--size', dest='size',
             action='store', type='int', default=0,
-            help=('Entire size of copied files'))
+            help=('Entire size of copied files in MB'))
     parser.add_option('-n', '--number', dest='number',
             action='store', type='int', default=0,
             help=('Number of copied files'))
