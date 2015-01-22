@@ -6,9 +6,13 @@ import optparse
 import subprocess
 import random
 import shutil
+import audiotranscode
+import sys
 
+sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
 EXCLUDE_DIRS = ['OST']
+EXTENSIONS = ('mp3', 'flac')
 
 def get_free_disk_space(path):
     return int(subprocess.check_output('df ' + path, shell=True).split('\n')[1].split()[3])
@@ -86,7 +90,7 @@ print 'Scanning directory...'
 for dirname, dirnames, filenames in os.walk(FROM_DIR):
     if not must_be_excluded(dirname, EXCLUDE_DIRS):
         for filename in filenames:
-            if filename.endswith('mp3'):
+            if filename.endswith(EXTENSIONS):
                 found_files.append(os.path.join(dirname, filename))
 
 print 'Copying files...'
@@ -94,6 +98,19 @@ print 'Copying files...'
 if not found_files:
     print 'Nothing to copy'
     exit(0)
+
+
+def do_copy(from_path, to_path):
+    shutil.copy(from_path, to_path)
+
+
+def do_transcode(from_path, to_path):
+    at = audiotranscode.AudioTranscode()
+    path_to_temp_file = '/tmp/' + os.path.basename(from_path).replace('flac', 'mp3')
+    at.transcode(from_path, path_to_temp_file, bitrate=320)
+    shutil.copy(path_to_temp_file, to_path)
+    os.remove(path_to_temp_file)
+
 
 copied_indexes = []
 copied_size = 0
@@ -105,16 +122,23 @@ while True:
             if FILES_NUMBER and FILES_NUMBER <= len(copied_indexes):
                 break
 
-            shutil.copy(found_files[index], TO_DIR)
+            if found_files[index].endswith('mp3'):
+                do_copy(found_files[index], TO_DIR)
+            else:
+                do_transcode(found_files[index], TO_DIR)
+                fileSize = os.stat(TO_DIR + '/' + os.path.basename(found_files[index]).replace('flac', 'mp3')).st_size
+
             copied_indexes.append(index)
             copied_size += fileSize
-
         else:
             break
 
     if len(copied_indexes) == len(found_files):
         break
-        
 
+    print '\rCopied %d files with size %d MB of %d'%(len(copied_indexes), copied_size / (1024*1024), FILES_SIZE),
+
+
+print ''
 print 'Copied files: ', len(copied_indexes)
 print 'With total size: ', copied_size/(1024*1024), "MB"
