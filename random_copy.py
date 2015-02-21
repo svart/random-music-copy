@@ -8,14 +8,26 @@ import random
 import shutil
 import audiotranscode
 import sys
+import multiprocessing
+import time
 
 sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
-EXCLUDE_DIRS = ['OST']
+EXCLUDE_DIRS = ['OST', 'Classical']
 EXTENSIONS = ('mp3', 'flac')
+
 
 def get_free_disk_space(path):
     return int(subprocess.check_output('df ' + path, shell=True).split('\n')[1].split()[3])
+
+def get_size(start_path):
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(start_path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            total_size += os.path.getsize(fp)
+    return total_size
+
 
 def must_be_excluded(dirpath, exclude_list):
     for item in exclude_list:
@@ -23,9 +35,11 @@ def must_be_excluded(dirpath, exclude_list):
             return True
     return False
 
+
 def print_error(message):
     print 'ERROR: ' + message
     exit(1)
+
 
 def process_options():
     usage = '''%prog -f SOURCE_DIR -t DEST_DIR -s MBYTES [-n NFILES].'''
@@ -90,7 +104,7 @@ print 'Scanning directory...'
 for dirname, dirnames, filenames in os.walk(FROM_DIR):
     if not must_be_excluded(dirname, EXCLUDE_DIRS):
         for filename in filenames:
-            if filename.endswith(EXTENSIONS):
+            if filename.lower().endswith(EXTENSIONS):
                 found_files.append(os.path.join(dirname, filename))
 
 print 'Copying files...'
@@ -99,37 +113,51 @@ if not found_files:
     print 'Nothing to copy'
     exit(0)
 
-
 def do_copy(from_path, to_path):
     shutil.copy(from_path, to_path)
+    #print 'Copy', from_path, to_path
 
 
 def do_transcode(from_path, to_path):
     at = audiotranscode.AudioTranscode()
     path_to_temp_file = '/tmp/' + os.path.basename(from_path).replace('flac', 'mp3')
     at.transcode(from_path, path_to_temp_file, bitrate=320)
-    shutil.copy(path_to_temp_file, to_path)
-    os.remove(path_to_temp_file)
+    shutil.move(path_to_temp_file, to_path)
+    #os.remove(path_to_temp_file)
+    #print 'Transcode', from_path, to_path
 
 
 copied_indexes = []
 copied_size = 0
+number_of_cores = multiprocessing.cpu_count()
+jobs = []
 while True:
     index = random.randint(0, len(found_files) - 1)
     if index not in copied_indexes:
         fileSize = os.stat(found_files[index]).st_size
+        copied_size = get_size(TO_DIR)
         if fileSize + copied_size < FILES_SIZE * 1024 * 1024:
             if FILES_NUMBER and FILES_NUMBER <= len(copied_indexes):
                 break
 
-            if found_files[index].endswith('mp3'):
-                do_copy(found_files[index], TO_DIR)
-            else:
-                do_transcode(found_files[index], TO_DIR)
-                fileSize = os.stat(TO_DIR + '/' + os.path.basename(found_files[index]).replace('flac', 'mp3')).st_size
+            if len(jobs) < number_of_cores:
+                if found_files[index].lower().endswith('mp3'):
+                    #do_copy(found_files[index], TO_DIR)
+                    p = multiprocessing.Process(target=do_copy, args=(found_files[index], TO_DIR,))
+                    jobs.append(p)
+                    p.start()
+                else:
+                    #do_transcode(found_files[index], TO_DIR)
+                    p = multiprocessing.Process(target=do_transcode, args=(found_files[index], TO_DIR,))
+                    jobs.append(p)
+                    p.start()
 
-            copied_indexes.append(index)
-            copied_size += fileSize
+                copied_indexes.append(index)
+
+            for i, job in enumerate(jobs):
+                if not job.is_alive():
+                    jobs.pop(i)
+            time.sleep(0.25)
         else:
             break
 
