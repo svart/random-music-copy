@@ -41,11 +41,11 @@ def print_error(message):
 
 
 def process_options():
-    usage = '''%prog -f SOURCE_DIR -t DEST_DIR -s MBYTES [-n NFILES].'''
+    usage = '''%prog -f SOURCE_DIR [-f SOURCE_DIR2 ...] -t DEST_DIR -s MBYTES [-n NFILES].'''
 
     parser = optparse.OptionParser(usage=usage)
     parser.add_option('-f', '--from', dest='from_dir',
-            action='store', type='str', default='',
+            action='append', type='string', default=[],
             help=('Source directory.'))
     parser.add_option('-t', '--to', dest='to_dir',
             action='store', type='str', default='',
@@ -67,10 +67,11 @@ opts, args = process_options()
 
 # Checking options
 if opts.from_dir:
-    if os.path.isdir(opts.from_dir):
-        FROM_DIR = opts.from_dir
-    else:
-        print_error('No such directory: ' + opts.from_dir)
+    for from_dir in opts.from_dir:
+        if not os.path.isdir(from_dir):
+            print_error('No such directory: ' + from_dir)
+
+    FROM_DIRS = opts.from_dir
 else:
     print_error('Source directory must be set')
 
@@ -98,13 +99,14 @@ if get_free_disk_space(TO_DIR) < FILES_SIZE * 1024:
 
 found_files = []
 
-print 'Scanning directory...'
+print 'Scanning source directories...'
 
-for dirname, dirnames, filenames in os.walk(FROM_DIR):
-    if not must_be_excluded(dirname, EXCLUDE_DIRS):
-        for filename in filenames:
-            if filename.lower().endswith(EXTENSIONS):
-                found_files.append(os.path.join(dirname, filename))
+for from_dir in FROM_DIRS:
+    for dirname, dirnames, filenames in os.walk(from_dir):
+        if not must_be_excluded(dirname, EXCLUDE_DIRS):
+            for filename in filenames:
+                if filename.lower().endswith(EXTENSIONS):
+                    found_files.append(os.path.join(dirname, filename))
 
 print 'Copying files...'
 
