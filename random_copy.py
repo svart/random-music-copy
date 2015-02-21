@@ -6,7 +6,6 @@ import optparse
 import subprocess
 import random
 import shutil
-import audiotranscode
 import sys
 import multiprocessing
 import time
@@ -14,7 +13,7 @@ import time
 sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
 EXCLUDE_DIRS = ['OST', 'Classical']
-EXTENSIONS = ('mp3', 'flac')
+EXTENSIONS = ('mp3', 'flac', 'm4a')
 
 
 def get_free_disk_space(path):
@@ -119,9 +118,12 @@ def do_copy(from_path, to_path):
 
 
 def do_transcode(from_path, to_path):
-    at = audiotranscode.AudioTranscode()
-    path_to_temp_file = '/tmp/' + os.path.basename(from_path).replace('flac', 'mp3')
-    at.transcode(from_path, path_to_temp_file, bitrate=320)
+    base_name = os.path.basename(from_path)
+    path_to_temp_file = '/tmp/' + base_name[:base_name.rfind('.')] + '.mp3'
+
+    ffmpeg_command = 'ffmpeg -loglevel quiet -threads 1 -i "' + from_path + '" -b:a 320k "' + path_to_temp_file + '"'
+    os.system(ffmpeg_command)
+
     shutil.move(path_to_temp_file, to_path)
     #os.remove(path_to_temp_file)
     #print 'Transcode', from_path, to_path
